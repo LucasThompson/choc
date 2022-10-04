@@ -22,6 +22,8 @@
 #include "../threading/choc_ThreadSafeFunctor.h"
 #include "../threading/choc_TaskThread.h"
 #include "../gui/choc_MessageLoop.h"
+#include "../gui/choc_WebView.h"
+#include "../gui/choc_DesktopWindow.h"
 #include "../text/choc_OpenSourceLicenseList.h"
 #include "../audio/choc_AudioFileFormat_MP3.h"
 #include "../audio/choc_AudioFileFormat_FLAC.h"
@@ -2361,6 +2363,391 @@ inline void testThreading (TestProgress& progress)
     }
 }
 
+inline void testWebView (choc::test::TestProgress& progress)
+{
+    CHOC_CATEGORY (WebView);
+
+    struct GuiTestHelper
+    {
+        GuiTestHelper (uint32_t timeoutMs) : window ({}), timeout (timeoutMs, [this] { return onTimeout(); })
+        {
+            window.setResizable (true); // makes the window closable on macOS
+            window.windowClosed = [] { choc::messageloop::stop(); };
+        }
+
+        void signalClose()
+        {
+            choc::messageloop::postMessage ([this] { close(); });
+        }
+
+        bool run (void* viewHandle)
+        {
+            window.setContent (viewHandle);
+            choc::messageloop::run();
+
+            return ! timedOut;
+        }
+
+        choc::ui::DesktopWindow window;
+
+    private:
+        void close()
+        {
+            const auto* handle = window.getWindowHandle();
+#if CHOC_LINUX
+            gtk_window_close ((GtkWindow*) handle);
+#elif CHOC_WINDOWS
+            SendMessage ((HWND) handle, WM_CLOSE, 0, 0);
+#elif CHOC_APPLE
+            choc::objc::call<void> ((id) handle, "performClose:", nullptr);
+#endif
+        }
+
+        bool onTimeout()
+        {
+            timedOut = true;
+            signalClose();
+
+            return false;
+        }
+
+        bool timedOut = false;
+        choc::messageloop::Timer timeout;
+    };
+
+    struct WebViewTestHelper
+    {
+        using FetchResource = choc::ui::WebView::Options::FetchResource;
+        WebViewTestHelper (FetchResource fetchResource, uint32_t timeoutMs)
+            : guiHelper (timeoutMs), webview ({ false, fetchResource })
+        {
+            webview.bind ("signalTestFinished", [this](const choc::value::ValueView& args) -> choc::value::Value
+            {
+                testResultFromJavascript = choc::json::toString (args[0], false);
+                guiHelper.signalClose();
+
+                return {};
+            });
+        }
+
+        bool run()
+        {
+            return guiHelper.run (webview.getViewHandle());
+        }
+
+        GuiTestHelper guiHelper;
+        choc::ui::WebView webview;
+
+        std::string testResultFromJavascript;
+    };
+
+    constexpr uint32_t timeoutMs = 10 * 1000;
+
+    {
+        CHOC_TEST (InitialNavigationToRootUri)
+
+        GuiTestHelper helper (timeoutMs);
+
+        std::string routeNavigatedTo;
+        const auto fetchResource = [&](const auto& path) -> choc::ui::WebView::Options::Resource
+        {
+            std::cout << "debug: did signal to close\n";
+            routeNavigatedTo = path;
+            helper.signalClose();
+
+            return {};
+        };
+
+        choc::ui::WebView webview ({ false, fetchResource });
+
+        CHOC_EXPECT_TRUE (helper.run (webview.getViewHandle()));
+        CHOC_EXPECT_EQ (routeNavigatedTo, "/");
+    }
+
+    {
+        CHOC_TEST (SuccessfulResponseContains200StatusCode)
+
+        const auto fetchResource = [](const auto& path) -> choc::ui::WebView::Options::Resource
+        {
+            if (path == "/")
+            {
+                static constexpr const auto html = R"xxx(
+                <!DOCTYPE html>
+                <html>
+                    <head> <title>Page Title</title> </head>
+                    <body>
+                    <script>
+                        async function runTest() {
+                            try {
+                                const response = await fetch("./test");
+                                const {ok, status, statusText} = response;
+                                const json = await response.json();
+                                signalTestFinished({text: json.text, ok, status, statusText});
+                            } catch (e) {
+                                signalTestFinished({errorMessage: e.message});
+                            }
+                        }
+                        (async () => {
+                            await runTest();
+                        })();
+                    </script>
+                    </body>
+                </html>
+                )xxx";
+
+                return
+                {
+                    { reinterpret_cast<const uint8_t*> (html), strlen (html) },
+                    "text/html"
+                };
+            }
+
+            if (path == "/test")
+            {
+                static constexpr const auto json = R"({"text": "it worked!"})";
+
+                return
+                {
+                    { reinterpret_cast<const uint8_t*> (json), strlen (json) },
+                    "application/json"
+                };
+            }
+
+            return {};
+        };
+
+        WebViewTestHelper helper (fetchResource, timeoutMs);
+
+        CHOC_EXPECT_TRUE (helper.run());
+        const auto expected = choc::value::createObject ("expected",
+                                                         "text", "it worked!",
+                                                         "ok", true,
+                                                         "status", 200,
+                                                         "statusText", "OK");
+        CHOC_EXPECT_EQ (helper.testResultFromJavascript, choc::json::toString (expected, false));
+    }
+
+    {
+        CHOC_TEST (EmptyOptionalResourceRespondsWith404StatusCode)
+
+        const auto fetchResource = [](const auto& path) -> std::optional<choc::ui::WebView::Options::Resource>
+        {
+            if (path == "/")
+            {
+                static constexpr const auto html = R"xxx(
+                <!DOCTYPE html>
+                <html>
+                    <head> <title>Page Title</title> </head>
+                    <body>
+                    <script>
+                        async function runTest() {
+                            try {
+                                const response = await fetch("./test");
+                                const {ok, status, statusText} = response;
+                                signalTestFinished({ok, status, statusText});
+                            } catch (e) {
+                                signalTestFinished({errorMessage: e.message});
+                            }
+                        }
+                        (async () => {
+                            await runTest();
+                        })();
+                    </script>
+                    </body>
+                </html>
+                )xxx";
+
+                return choc::ui::WebView::Options::Resource
+                {
+                    { reinterpret_cast<const uint8_t*> (html), strlen (html) },
+                    "text/html"
+                };
+            }
+
+            return {};
+        };
+
+        WebViewTestHelper helper (fetchResource, timeoutMs);
+
+        CHOC_EXPECT_TRUE (helper.run());
+        const auto expected = choc::value::createObject ("expected",
+                                                         "ok", false,
+                                                         "status", 404,
+                                                         "statusText", "Not Found");
+        CHOC_EXPECT_EQ (helper.testResultFromJavascript, choc::json::toString (expected, false));
+    }
+
+    {
+        CHOC_TEST (ExceptionWhilstFetchingCausesNetworkError)
+
+        const auto fetchResource = [](const auto& path) -> choc::ui::WebView::Options::Resource
+        {
+            if (path == "/")
+            {
+                static constexpr const auto html = R"xxx(
+                <!DOCTYPE html>
+                <html>
+                    <head> <title>Page Title</title> </head>
+                    <body></body>
+                    <script>
+                        async function runTest() {
+                            try {
+                                const response = await fetch("./error.json");
+                            } catch (e) {
+                                signalTestFinished({exceptionType: e.name});
+                            }
+                        }
+                        (async () => {
+                            await runTest();
+                        })();
+                    </script>
+                </html>
+                )xxx";
+
+                return
+                {
+                    { reinterpret_cast<const uint8_t*> (html), strlen (html) },
+                    "text/html"
+                };
+            }
+
+            throw "cause `fetch` to throw";
+        };
+
+        WebViewTestHelper helper (fetchResource, timeoutMs);
+
+        CHOC_EXPECT_TRUE (helper.run());
+        const auto expected = choc::value::createObject ("expected",
+                                                         "exceptionType", "TypeError");
+        CHOC_EXPECT_EQ (helper.testResultFromJavascript, choc::json::toString (expected, false));
+    }
+
+    {
+        CHOC_TEST (CanFetchJavascriptModule)
+
+        const auto fetchResource = [](const auto& path) -> std::optional<choc::ui::WebView::Options::Resource>
+        {
+            if (path == "/")
+            {
+                static constexpr const auto html = R"xxx(
+                <!DOCTYPE html>
+                <html>
+                    <head> <title>Page Title</title> </head>
+                    <body>
+                    <script type="module">
+                        import { runTest } from "./test.js";
+
+                        (async () => {
+                            await runTest();
+                        })();
+                    </script>
+                    </body>
+                </html>
+                )xxx";
+
+                return choc::ui::WebView::Options::Resource
+                {
+                    { reinterpret_cast<const uint8_t*> (html), strlen (html) },
+                    "text/html"
+                };
+            }
+
+            if (path == "/test.js")
+            {
+                const auto js = R"(
+                    export async function runTest() {
+                        signalTestFinished({text: "module"});
+                    }
+                )";
+
+                return choc::ui::WebView::Options::Resource
+                {
+                    { reinterpret_cast<const uint8_t*> (js), strlen (js) },
+                    "application/javascript"
+                };
+            }
+
+            return {};
+        };
+
+        WebViewTestHelper helper (fetchResource, timeoutMs);
+
+        CHOC_EXPECT_TRUE (helper.run());
+        const auto expected = choc::value::createObject ("expected",
+                                                         "text", "module");
+        CHOC_EXPECT_EQ (helper.testResultFromJavascript, choc::json::toString (expected, false));
+    }
+
+    {
+        CHOC_TEST (CanFetchImgTag)
+
+        const auto fetchResource = [](const auto& path) -> choc::ui::WebView::Options::Resource
+        {
+            if (path == "/")
+            {
+                static constexpr const auto html = R"xxx(
+                <!DOCTYPE html>
+                <html>
+                    <head> <title>Page Title</title> </head>
+                    <body>
+                    <img id="red" src="./red.bmp">
+                    <script>
+                        async function runTest() {
+                            const img = document.getElementById("red");
+                            img.addEventListener("load", () => {
+                                const canvas = document.createElement("canvas");
+                                const width = img.width;
+                                const height = img.height;
+                                canvas.width = width;
+                                canvas.height = height;
+
+                                const context = canvas.getContext("2d");
+                                context.drawImage(img, 0, 0, width, height);
+                                const pixels = context.getImageData(0, 0, width, height);
+                                signalTestFinished({pixelValue: pixels.data[0]});
+                            });
+                        }
+
+                        (async () => {
+                            await runTest();
+                        })();
+                    </script>
+                    </body>
+                </html>
+                )xxx";
+
+                return
+                {
+                    { reinterpret_cast<const uint8_t*> (html), strlen (html) },
+                    "text/html"
+                };
+            }
+
+            if (path == "/red.bmp")
+            {
+                static constexpr const uint8_t bitmap[] = {
+                    66, 77, 58, 0, 0, 0, 0, 0, 0, 0, 54, 0, 0, 0, 40, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 24, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 0
+                };
+
+                return
+                {
+                    { std::addressof (bitmap[0]), sizeof (bitmap) / sizeof (bitmap[0]) },
+                    "image/bmp"
+                };
+            }
+
+            return {};
+        };
+
+        WebViewTestHelper helper (fetchResource, timeoutMs);
+
+        CHOC_EXPECT_TRUE (helper.run());
+        const auto expected = choc::value::createObject ("expected",
+                                                         "pixelValue", 255);
+        CHOC_EXPECT_EQ (helper.testResultFromJavascript, choc::json::toString (expected, false));
+    }
+}
+
 //==============================================================================
 inline bool runAllTests (TestProgress& progress)
 {
@@ -2381,6 +2768,7 @@ inline bool runAllTests (TestProgress& progress)
     testAudioFileFormat (progress);
     testTimers (progress);
     testThreading (progress);
+    testWebView (progress);
 
     progress.printReport();
     return progress.numFails == 0;
