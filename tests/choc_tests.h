@@ -2394,13 +2394,13 @@ inline void testWebView (choc::test::TestProgress& progress)
         void close()
         {
             const auto* handle = window.getWindowHandle();
-#if CHOC_LINUX
+           #if CHOC_LINUX
             gtk_window_close ((GtkWindow*) handle);
-#elif CHOC_WINDOWS
+           #elif CHOC_WINDOWS
             SendMessage ((HWND) handle, WM_CLOSE, 0, 0);
-#elif CHOC_APPLE
+           #elif CHOC_APPLE
             choc::objc::call<void> ((id) handle, "performClose:", nullptr);
-#endif
+           #endif
         }
 
         bool onTimeout()
