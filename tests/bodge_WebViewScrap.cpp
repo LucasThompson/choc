@@ -40,7 +40,9 @@ void testWebView (choc::test::TestProgress& progress)
             window.setContent (viewHandle);
             std::cout << guiHelperId << ": GuiTestHelper::run(): about to create timer\n";
             startTime = std::chrono::high_resolution_clock::now();
-            timeout = choc::messageloop::Timer (testTimeoutMs, [this] { return onTimeout(); });
+            // bodge: workaround timers being fired early, check every second, we'll do a duration
+            // check inside the callback
+            timeout = choc::messageloop::Timer (1000, [this] { return onTimeout(); });
             std::cout << guiHelperId << ": GuiTestHelper::run(): created timer. about to run messageloop.\n";
             choc::messageloop::run();
 
@@ -52,7 +54,8 @@ void testWebView (choc::test::TestProgress& progress)
     private:
         void close()
         {
-            std::cout << guiHelperId << ": GuiTestHelper::close()\n";
+            std::cout << guiHelperId << ": GuiTestHelper::close(): kill timeout\n";
+            timeout = {};
             const auto* handle = window.getWindowHandle();
            #if CHOC_LINUX
             gtk_window_close ((GtkWindow*) handle);
@@ -66,11 +69,14 @@ void testWebView (choc::test::TestProgress& progress)
         bool onTimeout()
         {
             const auto duration = std::chrono::duration_cast<std::chrono::milliseconds> (std::chrono::high_resolution_clock::now() - startTime);
-            std::cout << guiHelperId << ": GuiTestHelper::onTimeout(): " << duration.count() << " elapsed\n";
-            timedOut = true;
-            signalClose();
+            if (duration >= static_cast<std::chrono::milliseconds> (testTimeoutMs))
+            {
+                std::cout << guiHelperId << ": GuiTestHelper::onTimeout(): " << duration.count() << " elapsed\n";
+                timedOut = true;
+                signalClose();
+            }
 
-            return false;
+            return ! false;
         }
 
         bool timedOut = false;
