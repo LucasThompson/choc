@@ -2497,7 +2497,7 @@ inline void testWebView (choc::test::TestProgress& progress)
 
                 return
                 {
-                    { reinterpret_cast<const uint8_t*> (html), strlen (html) },
+                    std::vector<uint8_t> (reinterpret_cast<const uint8_t*> (html), reinterpret_cast<const uint8_t*> (html) + strlen (html)),
                     "text/html"
                 };
             }
@@ -2508,7 +2508,7 @@ inline void testWebView (choc::test::TestProgress& progress)
 
                 return
                 {
-                    { reinterpret_cast<const uint8_t*> (json), strlen (json) },
+                    std::vector<uint8_t> (reinterpret_cast<const uint8_t*> (json), reinterpret_cast<const uint8_t*> (json) + strlen (json)),
                     "application/json"
                 };
             }
@@ -2559,7 +2559,7 @@ inline void testWebView (choc::test::TestProgress& progress)
 
                 return choc::ui::WebView::Options::Resource
                 {
-                    { reinterpret_cast<const uint8_t*> (html), strlen (html) },
+                    std::vector<uint8_t> (reinterpret_cast<const uint8_t*> (html), reinterpret_cast<const uint8_t*> (html) + strlen (html)),
                     "text/html"
                 };
             }
@@ -2606,7 +2606,7 @@ inline void testWebView (choc::test::TestProgress& progress)
 
                 return
                 {
-                    { reinterpret_cast<const uint8_t*> (html), strlen (html) },
+                    std::vector<uint8_t> (reinterpret_cast<const uint8_t*> (html), reinterpret_cast<const uint8_t*> (html) + strlen (html)),
                     "text/html"
                 };
             }
@@ -2647,7 +2647,7 @@ inline void testWebView (choc::test::TestProgress& progress)
 
                 return choc::ui::WebView::Options::Resource
                 {
-                    { reinterpret_cast<const uint8_t*> (html), strlen (html) },
+                    std::vector<uint8_t> (reinterpret_cast<const uint8_t*> (html), reinterpret_cast<const uint8_t*> (html) + strlen (html)),
                     "text/html"
                 };
             }
@@ -2662,7 +2662,7 @@ inline void testWebView (choc::test::TestProgress& progress)
 
                 return choc::ui::WebView::Options::Resource
                 {
-                    { reinterpret_cast<const uint8_t*> (js), strlen (js) },
+                    std::vector<uint8_t> (reinterpret_cast<const uint8_t*> (js), reinterpret_cast<const uint8_t*> (js) + strlen (js)),
                     "application/javascript"
                 };
             }
@@ -2718,7 +2718,7 @@ inline void testWebView (choc::test::TestProgress& progress)
 
                 return
                 {
-                    { reinterpret_cast<const uint8_t*> (html), strlen (html) },
+                    std::vector<uint8_t> (reinterpret_cast<const uint8_t*> (html), reinterpret_cast<const uint8_t*> (html) + strlen (html)),
                     "text/html"
                 };
             }
@@ -2731,7 +2731,7 @@ inline void testWebView (choc::test::TestProgress& progress)
 
                 return
                 {
-                    { std::addressof (bitmap[0]), sizeof (bitmap) / sizeof (bitmap[0]) },
+                    std::vector<uint8_t> (std::addressof (bitmap[0]), std::addressof (bitmap[0]) + (sizeof (bitmap) / sizeof (bitmap[0]))),
                     "image/bmp"
                 };
             }

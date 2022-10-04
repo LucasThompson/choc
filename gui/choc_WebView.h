@@ -21,7 +21,7 @@
 
 #include <optional>
 #include <unordered_map>
-#include "../containers/choc_Span.h"
+#include <vector>
 #include "../text/choc_JSON.h"
 #include "choc_MessageLoop.h"
 
@@ -84,7 +84,7 @@ public:
         /// `fetch` calls from javascript etc) will result in subsequent calls here.
         struct Resource
         {
-            choc::span<uint8_t> data;
+            std::vector<uint8_t> data;
             std::string mimeType;
         };
 
