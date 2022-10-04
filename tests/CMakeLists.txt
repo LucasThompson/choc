@@ -2,7 +2,8 @@ cmake_minimum_required(VERSION 3.16)
 
 project(choc_tests)
 
-add_executable(choc_tests main.cpp main2.cpp)
+#add_executable(choc_tests main.cpp main2.cpp)
+add_executable(choc_tests bodge_WebViewScrap.cpp)
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR
     CMAKE_CXX_COMPILER_ID MATCHES "GNU")
