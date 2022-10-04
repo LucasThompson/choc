@@ -114,12 +114,14 @@ void testWebView (choc::test::TestProgress& progress)
         std::string testResultFromJavascript;
     };
 
-    constexpr uint32_t timeoutMs = 10 * 1000;
+    constexpr uint32_t timeoutMs = 30 * 1000;
 
     {
         CHOC_TEST (InitialNavigationToRootUri)
 
+        std::cout << "debug InitialNavigationToRootUri: about to construct GuiTestHelper\n";
         GuiTestHelper helper (timeoutMs);
+        std::cout << "debug InitialNavigationToRootUri: constructed GuiTestHelper\n";
 
         std::string routeNavigatedTo;
         const auto fetchResource = [&](const auto& path) -> choc::ui::WebView::Options::Resource
@@ -131,7 +133,9 @@ void testWebView (choc::test::TestProgress& progress)
             return {};
         };
 
+        std::cout << "debug InitialNavigationToRootUri: about to construct webview\n";
         choc::ui::WebView webview ({ false, fetchResource });
+        std::cout << "debug InitialNavigationToRootUri: constructed webview\n";
 
         CHOC_EXPECT_TRUE (helper.run (webview.getViewHandle()));
         CHOC_EXPECT_EQ (routeNavigatedTo, "/");
@@ -439,6 +443,11 @@ int main()
     for (size_t i = 0; i < maxRuns; ++i)
     {
         std::cout << "run " << i + 1 << "/" << maxRuns << "\n";
+
+        if (i == 375)
+        {
+            std::cout << "will it hang on windows here again?\n";
+        }
 
         choc::test::TestProgress progress;
         if (! bodge::runAllTests (progress))
