@@ -87,6 +87,7 @@ public:
             choc::span<uint8_t> data;
             std::string mimeType;
         };
+
         using Path = std::string;
         using FetchResource = std::function<std::optional<Resource>(const Path&)>;
         FetchResource fetchResource;
@@ -190,7 +191,7 @@ struct choc::ui::WebView::Pimpl
 
         if (options.fetchResource)
         {
-            const auto callback = [](auto* request, auto* context)
+            const auto callback = +[](auto* request, auto* context)
             {
                 try
                 {
@@ -227,7 +228,7 @@ struct choc::ui::WebView::Pimpl
                 }
             };
 
-            webkit_web_context_register_uri_scheme(webviewContext, "choc", callback, this, nullptr);
+            webkit_web_context_register_uri_scheme (webviewContext, "choc", callback, this, nullptr);
 
             navigate ("choc://choc.choc/");
         }
@@ -981,18 +982,14 @@ private:
 
     HRESULT onResourceRequested (ICoreWebView2WebResourceRequestedEventArgs* args)
     {
-        class ScopedExit
+        struct ScopedExit
         {
-        public:
             using Fn = std::function<void()>;
-            explicit ScopedExit (Fn fn)
-            : onExit (std::move (fn))
-            {
-            }
+
+            explicit ScopedExit (Fn&& fn) : onExit (std::move (fn)) {}
 
             ScopedExit (const ScopedExit&) = delete;
             ScopedExit (ScopedExit&&) = delete;
-
             ScopedExit& operator= (const ScopedExit&) = delete;
             ScopedExit& operator= (ScopedExit&&) = delete;
 
@@ -1002,7 +999,6 @@ private:
                     onExit();
             }
 
-        private:
             Fn onExit;
         };
 
