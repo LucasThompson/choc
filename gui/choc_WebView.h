@@ -191,7 +191,7 @@ struct choc::ui::WebView::Pimpl
 
         if (options.fetchResource)
         {
-            const auto callback = +[](auto* request, auto* context)
+            const auto callback = [](auto* request, auto* context)
             {
                 try
                 {
