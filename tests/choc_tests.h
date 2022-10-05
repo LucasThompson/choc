@@ -73,6 +73,8 @@
 
 #include "choc_UnitTest.h"
 
+#include <chrono>
+
 /**
     To keep things simpole for users, I've just shoved all the tests for everything into this
     one dependency-free header, and provided one function call (`choc::test::runAllTests) that
@@ -2382,7 +2384,8 @@ inline void testWebView (choc::test::TestProgress& progress)
 
         bool run (void* viewHandle)
         {
-            timeout = choc::messageloop::Timer (testTimeoutMs, [this] { return onTimeout(); });
+            startTime = std::chrono::high_resolution_clock::now();
+            timeout = choc::messageloop::Timer (1000, [this] { return onTimeout(); });
             window.setContent (viewHandle);
             choc::messageloop::run();
 
@@ -2407,14 +2410,20 @@ inline void testWebView (choc::test::TestProgress& progress)
 
         bool onTimeout()
         {
-            timedOut = true;
-            signalClose();
+            const auto duration = std::chrono::duration_cast<std::chrono::milliseconds> (std::chrono::high_resolution_clock::now() - startTime);
+            if (duration >= static_cast<std::chrono::milliseconds> (testTimeoutMs))
+            {
+                timedOut = true;
+                signalClose();
+            }
 
-            return false;
+            return ! false;
         }
 
         bool timedOut = false;
         uint32_t testTimeoutMs = 0;
+        using TimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
+        TimePoint startTime;
         choc::messageloop::Timer timeout;
     };
 
